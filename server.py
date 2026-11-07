@@ -72,7 +72,7 @@ def discuter(data: ChatRequest):
 
         return {"reply": response.output_text}
 
-        except Exception as erreur:
+    except Exception as erreur:
         print("ERREUR AFRICA AI :", repr(erreur))
         raise HTTPException(
             status_code=500,
