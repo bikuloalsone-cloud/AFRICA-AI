@@ -72,7 +72,8 @@ def discuter(data: ChatRequest):
 
         return {"reply": response.output_text}
 
-    except Exception:
+        except Exception as erreur:
+        print("ERREUR AFRICA AI :", repr(erreur))
         raise HTTPException(
             status_code=500,
             detail="Impossible de contacter l'intelligence artificielle."
