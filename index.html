@@ -15,6 +15,7 @@
 
     <nav id="navigation">
         <a href="#home">Accueil</a>
+        <a href="#brain">Assistant</a>
         <a href="#services">Fonctionnalités</a>
         <a href="#about">À propos</a>
         <a href="#pricing">Premium</a>
@@ -24,13 +25,14 @@
         <button class="login-btn" onclick="showMessage('La connexion sera activée prochainement.')">
             Connexion
         </button>
-        <a href="#services" class="start-btn">Commencer ↗</a>
+        <a href="#brain" class="start-btn">Commencer ↗</a>
     </div>
 
     <button class="menu-btn" onclick="toggleMenu()">☰</button>
 </header>
 
 <main>
+
 <section class="hero" id="home">
     <div class="hero-content">
         <div class="badge">
@@ -49,7 +51,7 @@
         </p>
 
         <div class="hero-buttons">
-            <a href="#services" class="primary-btn">Découvrir AFRICA AI ↗</a>
+            <a href="#brain" class="primary-btn">Essayer AFRICA BRAIN ↗</a>
             <a href="#about" class="secondary-btn">Explorer la plateforme</a>
         </div>
 
@@ -86,6 +88,82 @@
     </div>
 </section>
 
+<!-- ESPACE DE DISCUSSION AFRICA BRAIN -->
+<section class="brain" id="brain">
+    <div class="brain-inner">
+
+        <div class="section-heading">
+            <span class="section-tag">01 / INTELLIGENCE ARTIFICIELLE</span>
+            <h2>Bienvenue dans <span>AFRICA BRAIN.</span></h2>
+            <p>
+                Posez vos questions, apprenez, réfléchissez
+                et développez vos idées avec votre assistant.
+            </p>
+        </div>
+
+        <div class="chat-panel">
+
+            <div class="chat-header">
+                <div class="brain-identity">
+                    <div class="brain-avatar">✦</div>
+                    <div>
+                        <strong>AFRICA BRAIN</strong>
+                        <small><span class="status-dot"></span> Assistant disponible</small>
+                    </div>
+                </div>
+
+                <span class="chat-model">Gemini AI</span>
+            </div>
+
+            <div
+                class="chat-messages"
+                id="chatMessages"
+                role="log"
+                aria-live="polite"
+                aria-label="Conversation avec AFRICA AI"
+            >
+                <div class="message assistant">
+                    <div class="message-avatar">✦</div>
+                    <div class="message-content">
+                        <span>AFRICA AI</span>
+                        <p>
+                            Bonjour ! Je suis AFRICA AI.
+                            Posez-moi une question. Nous pouvons
+                            apprendre, réfléchir et créer ensemble.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <form class="chat-form" id="chatForm">
+                <label class="sr-only" for="chatInput">
+                    Écrivez votre message
+                </label>
+
+                <textarea
+                    id="chatInput"
+                    name="message"
+                    rows="2"
+                    maxlength="4000"
+                    placeholder="Écrivez votre message à AFRICA AI..."
+                    required
+                ></textarea>
+
+                <button type="submit" id="sendButton">
+                    Envoyer ↗
+                </button>
+            </form>
+
+            <p class="chat-disclaimer">
+                AFRICA AI peut commettre des erreurs.
+                Évitez de partager des informations confidentielles.
+            </p>
+
+        </div>
+    </div>
+</section>
+
+<!-- FONCTIONNALITES -->
 <section class="services" id="services">
     <div class="section-heading">
         <span class="section-tag">NOTRE UNIVERS</span>
@@ -94,12 +172,13 @@
     </div>
 
     <div class="service-grid">
+
         <article class="service-card featured">
             <div class="service-icon">✦</div>
             <span>01 / INTELLIGENCE</span>
             <h3>AFRICA BRAIN</h3>
             <p>Discutez, posez vos questions et obtenez une assistance intelligente.</p>
-            <span class="availability">EN DÉVELOPPEMENT</span>
+            <span class="availability">ASSISTANT DISPONIBLE EN TEST</span>
         </article>
 
         <article class="service-card">
@@ -141,6 +220,7 @@
             <p>Concevez des applications et préparez leurs fichiers téléchargeables.</p>
             <span class="availability">EN DÉVELOPPEMENT</span>
         </article>
+
     </div>
 </section>
 
@@ -202,6 +282,7 @@
     <p>Construisons ensemble une nouvelle expérience de l'intelligence.</p>
     <a href="mailto:contact@africaai.example" class="primary-btn">Contacter l'équipe ↗</a>
 </section>
+
 </main>
 
 <footer>
@@ -213,4 +294,3 @@
 <script src="script.js"></script>
 </body>
 </html>
-
