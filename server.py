@@ -128,7 +128,37 @@ def script():
     return FileResponse(
         BASE_DIR / "script.js"
     )
+@app.get("/manifest.webmanifest")
+def manifest():
+    return FileResponse(
+        BASE_DIR / "manifest.webmanifest",
+        media_type="application/manifest+json"
+    )
 
+
+@app.get("/service-worker.js")
+def service_worker():
+    return FileResponse(
+        BASE_DIR / "service-worker.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"}
+    )
+
+
+@app.get("/icon-192.png")
+def icon_192():
+    return FileResponse(
+        BASE_DIR / "icon-192.png",
+        media_type="image/png"
+    )
+
+
+@app.get("/icon-512.png")
+def icon_512():
+    return FileResponse(
+        BASE_DIR / "icon-512.png",
+        media_type="image/png"
+    )
 
 @app.get("/api/health")
 def verification():
