@@ -999,4 +999,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
     renderConversationHistory();
 
-});
+});// 16. INSTALLATION PWA ANDROID
+
+if ("serviceWorker" in navigator) {
+
+    window.addEventListener("load", async () => {
+
+        try {
+
+            const registration =
+                await navigator.serviceWorker.register(
+                    "/service-worker.js"
+                );
+
+            console.log(
+                "AFRICA AI : application PWA activée.",
+                registration.scope
+            );
+
+        } catch (error) {
+
+            console.error(
+                "ERREUR SERVICE WORKER :",
+                error
+            );
+
+        }
+
+    });
+
+}
