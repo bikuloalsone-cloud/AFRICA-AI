@@ -1499,3 +1499,41 @@ footer {
         gap: 15px;
     }
 }
+
+/* =====================================
+   AFRICA MEMORY 2.0
+===================================== */
+.memory-view { width: min(100% - 48px, 980px); margin: 45px auto 55px; }
+.memory-heading { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:28px; }
+.memory-eyebrow { color:var(--primary); font-size:11px; font-weight:800; letter-spacing:2px; }
+.memory-heading h1 { font-size:clamp(28px,4vw,42px); margin:7px 0; }
+.memory-heading p,.memory-control-card p,.memory-toolbar p,.memory-danger-zone p { color:var(--muted); font-size:14px; }
+.memory-mark { width:66px; height:66px; flex:none; display:grid; place-items:center; border-radius:20px; color:var(--primary); background:rgba(25,214,160,.1); font-size:35px; }
+.memory-control-card,.memory-add-form,.memory-item,.memory-danger-zone { background:var(--surface); border:1px solid var(--border); border-radius:15px; padding:20px; }
+.memory-control-card,.memory-danger-zone { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.memory-control-card strong,.memory-danger-zone strong { display:block; margin-bottom:5px; }
+.memory-switch { position:relative; width:54px; height:30px; flex:none; }
+.memory-switch input { opacity:0; width:0; height:0; }
+.memory-switch span { position:absolute; inset:0; cursor:pointer; border-radius:30px; background:#39465b; transition:.2s; }
+.memory-switch span:before { content:""; position:absolute; width:22px; height:22px; left:4px; top:4px; border-radius:50%; background:white; transition:.2s; }
+.memory-switch input:checked + span { background:var(--primary); }
+.memory-switch input:checked + span:before { transform:translateX(24px); }
+.memory-toolbar { display:flex; align-items:center; justify-content:space-between; gap:15px; margin:32px 0 15px; }
+.memory-toolbar h2 { font-size:21px; }
+.memory-secondary-btn,.memory-delete-btn { border:1px solid var(--border); border-radius:8px; padding:9px 13px; background:var(--surface-light); color:var(--text); }
+.memory-add-form { display:grid; gap:12px; margin-bottom:16px; }
+.memory-add-form label { font-weight:700; font-size:14px; }
+.memory-add-form textarea { width:100%; resize:vertical; min-height:76px; padding:13px; border-radius:9px; border:1px solid var(--border); background:var(--background); color:var(--text); font:inherit; }
+.memory-add-form button { justify-self:start; padding:11px 16px; border:0; border-radius:8px; background:var(--primary); color:#06150f; font-weight:800; }
+.memory-list { display:grid; gap:12px; }
+.memory-item p { white-space:pre-wrap; overflow-wrap:anywhere; margin-bottom:14px; }
+.memory-item-meta { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.memory-item-meta small { color:var(--muted); font-size:11px; }
+.memory-delete-btn { color:#ff9292; }
+.memory-empty { padding:25px; text-align:center; color:var(--muted); background:var(--surface); border:1px dashed var(--border); border-radius:12px; }
+.memory-danger-zone { margin-top:25px; border-color:rgba(255,100,100,.25); }
+.memory-danger-btn { flex:none; padding:10px 14px; border:1px solid rgba(255,100,100,.4); border-radius:8px; background:rgba(255,80,80,.1); color:#ff9292; font-weight:700; }
+.memory-status { min-height:22px; margin-top:12px; color:var(--primary); font-size:13px; }
+.memory-status.error { color:#ff9292; }
+.memory-add-form button:disabled,.memory-danger-btn:disabled,.memory-secondary-btn:disabled { opacity:.55; cursor:wait; }
+@media(max-width:650px) { .memory-view { width:calc(100% - 26px); margin:25px auto 40px; } .memory-heading { align-items:flex-start; } .memory-mark { width:48px; height:48px; font-size:26px; } .memory-control-card,.memory-danger-zone { align-items:flex-start; } .memory-danger-zone { flex-direction:column; } .memory-item-meta { align-items:flex-start; flex-direction:column; } }
