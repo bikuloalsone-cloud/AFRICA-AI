@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -9,234 +8,64 @@
     <title>AFRICA AI | Intelligence Without Borders</title>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/icon-192.png">
+    <link rel="apple-touch-icon" href="/icon-192.png">
 </head>
 <body>
-
-<!-- ECRAN DE CONNEXION GOOGLE -->
 <div id="loginScreen" class="login-screen">
     <div class="login-card">
         <a href="#" class="logo">AFRICA<span>AI.</span></a>
-
         <div class="login-symbol">✦</div>
-
         <h1>Bienvenue sur AFRICA AI</h1>
-
-        <p>
-            Votre espace intelligent pour apprendre,
-            rechercher, créer et développer vos idées.
-        </p>
-
-        <button id="googleLoginButton" class="google-login-btn">
-            <span class="google-letter">G</span>
-            Continuer avec Google
-        </button>
-
-        <small>
-            En vous connectant, vous acceptez les conditions
-            d'utilisation et la politique de confidentialité.
-        </small>
-
+        <p>Votre espace intelligent pour apprendre, rechercher, créer et développer vos idées.</p>
+        <button id="googleLoginButton" class="google-login-btn"><span class="google-letter">G</span>Continuer avec Google</button>
+        <small>En vous connectant, vous acceptez les conditions d'utilisation et la politique de confidentialité.</small>
         <p id="loginError" class="login-error" role="alert"></p>
     </div>
 </div>
-
-<!-- APPLICATION PRINCIPALE -->
 <div id="appShell" class="app-shell" hidden>
-
-    <!-- MENU LATERAL -->
     <aside class="sidebar" id="sidebar">
-
-        <div class="sidebar-brand">
-            <a href="#" class="logo">AFRICA<span>AI.</span></a>
-            <button id="closeSidebar" class="sidebar-close" aria-label="Fermer le menu">×</button>
-        </div>
-
-        <button id="newConversationButton" class="new-chat-btn">
-            <span>＋</span>
-            Nouvelle conversation
-        </button>
-
+        <div class="sidebar-brand"><a href="#" class="logo">AFRICA<span>AI.</span></a><button id="closeSidebar" class="sidebar-close" aria-label="Fermer le menu">×</button></div>
+        <button id="newConversationButton" class="new-chat-btn"><span>＋</span>Nouvelle conversation</button>
         <nav class="sidebar-navigation">
-
             <p class="sidebar-label">ESPACE DE TRAVAIL</p>
-
-            <button class="sidebar-link active" data-view="assistant">
-                <span>✦</span> AFRICA BRAIN
-            </button>
-
-            <button class="sidebar-link" data-view="web">
-                <span>◎</span> AFRICA WEB
-            </button>
-
-            <button class="sidebar-link" data-view="learn">
-                <span>⌘</span> AFRICA LEARN
-            </button>
-
-            <button class="sidebar-link" data-view="code">
-                <span>{ }</span> AFRICA CODE
-            </button>
-
-            <button class="sidebar-link" data-view="create">
-                <span>▧</span> AFRICA CREATE
-            </button>
-
-            <button class="sidebar-link" data-view="projects">
-                <span>▣</span> MES PROJETS
-            </button>
-
+            <button class="sidebar-link active" data-view="assistant"><span>✦</span> AFRICA BRAIN</button>
+            <button class="sidebar-link" data-view="web"><span>◎</span> AFRICA WEB</button>
+            <button class="sidebar-link" data-view="learn"><span>⌘</span> AFRICA LEARN</button>
+            <button class="sidebar-link" data-view="code"><span>{ }</span> AFRICA CODE</button>
+            <button class="sidebar-link" data-view="create"><span>▧</span> AFRICA CREATE</button>
+            <button class="sidebar-link" data-view="projects"><span>▣</span> MES PROJETS</button>
             <p class="sidebar-label history-label">CONVERSATIONS RÉCENTES</p>
-
-            <div id="conversationHistory" class="conversation-history">
-                <p class="empty-history">Aucune conversation enregistrée.</p>
-            </div>
-
+            <div id="conversationHistory" class="conversation-history"><p class="empty-history">Aucune conversation enregistrée.</p></div>
         </nav>
-
         <div class="sidebar-bottom">
-
-            <button class="sidebar-link" data-view="settings">
-                <span>⚙</span> Paramètres
-            </button>
-
-            <button class="sidebar-link premium-link" data-view="premium">
-                <span>♛</span> AFRICA PREMIUM
-            </button>
-
-            <div class="user-profile">
-                <div class="profile-avatar" id="userAvatar">A</div>
-                <div class="profile-details">
-                    <strong id="userName">Utilisateur</strong>
-                    <small id="userEmail">Compte Google</small>
-                </div>
-                <button id="logoutButton" class="logout-btn" title="Déconnexion">
-                    ↪
-                </button>
-            </div>
-
+            <button class="sidebar-link" data-view="settings"><span>⚙</span> Paramètres</button>
+            <button class="sidebar-link premium-link" data-view="premium"><span>♛</span> AFRICA PREMIUM</button>
+            <div class="user-profile"><div class="profile-avatar" id="userAvatar">A</div><div class="profile-details"><strong id="userName">Utilisateur</strong><small id="userEmail">Compte Google</small></div><button id="logoutButton" class="logout-btn" title="Déconnexion">↪</button></div>
         </div>
     </aside>
-
-    <!-- CONTENU PRINCIPAL -->
     <main class="main-content">
-
-        <header class="app-topbar">
-            <button id="openSidebar" class="mobile-menu-btn" aria-label="Ouvrir le menu">
-                ☰
-            </button>
-
-            <div class="topbar-title">
-                <strong id="currentPageTitle">AFRICA BRAIN</strong>
-                <small>INTELLIGENCE WITHOUT BORDERS</small>
-            </div>
-
-            <div class="topbar-user">
-                <div class="online-indicator"></div>
-                <span>En ligne</span>
-            </div>
-        </header>
-
-        <!-- ASSISTANT -->
+        <header class="app-topbar"><button id="openSidebar" class="mobile-menu-btn" aria-label="Ouvrir le menu">☰</button><div class="topbar-title"><strong id="currentPageTitle">AFRICA BRAIN</strong><small>INTELLIGENCE WITHOUT BORDERS</small></div><div class="topbar-user"><div class="online-indicator"></div><span>En ligne</span></div></header>
         <section id="assistantView" class="app-view">
-
-            <div class="assistant-welcome">
-                <div class="welcome-symbol">✦</div>
-
-                <h1>Que pouvons-nous<br><span>accomplir aujourd'hui ?</span></h1>
-
-                <p>
-                    Posez vos questions, approfondissez vos recherches
-                    et donnez vie à vos idées avec AFRICA AI.
-                </p>
+            <div class="assistant-welcome"><div class="welcome-symbol">✦</div><h1>Que pouvons-nous<br><span>accomplir aujourd'hui ?</span></h1><p>Posez vos questions, approfondissez vos recherches et donnez vie à vos idées avec AFRICA AI.</p></div>
+            <div class="chat-panel"><div class="chat-header"><div class="brain-identity"><div class="brain-avatar">✦</div><div><strong>AFRICA BRAIN</strong><small><span class="status-dot"></span> Assistant disponible</small></div></div></div>
+                <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-label="Conversation avec AFRICA AI"><div class="message assistant"><div class="message-avatar">✦</div><div class="message-content"><span>AFRICA AI</span><div class="message-body"><p>Bonjour ! Je suis AFRICA AI. Comment puis-je vous aider aujourd'hui ?</p></div></div></div></div>
+                <form class="chat-form" id="chatForm"><label class="sr-only" for="chatInput">Votre message</label><textarea id="chatInput" name="message" rows="2" maxlength="4000" placeholder="Écrivez votre message à AFRICA AI..." required></textarea><button type="submit" id="sendButton">Envoyer ↗</button></form><p class="chat-disclaimer">AFRICA AI peut commettre des erreurs. Vérifiez les informations importantes.</p>
             </div>
-
-            <div class="chat-panel">
-
-                <div class="chat-header">
-                    <div class="brain-identity">
-                        <div class="brain-avatar">✦</div>
-                        <div>
-                            <strong>AFRICA BRAIN</strong>
-                            <small><span class="status-dot"></span> Assistant disponible</small>
-                        </div>
-                    </div>
-                </div>
-
-                <div
-                    class="chat-messages"
-                    id="chatMessages"
-                    role="log"
-                    aria-live="polite"
-                    aria-label="Conversation avec AFRICA AI"
-                >
-                    <div class="message assistant">
-                        <div class="message-avatar">✦</div>
-                        <div class="message-content">
-                            <span>AFRICA AI</span>
-                            <div class="message-body">
-                                <p>
-                                    Bonjour ! Je suis AFRICA AI.
-                                    Comment puis-je vous aider aujourd'hui ?
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <form class="chat-form" id="chatForm">
-
-                    <label class="sr-only" for="chatInput">
-                        Votre message
-                    </label>
-
-                    <textarea
-                        id="chatInput"
-                        name="message"
-                        rows="2"
-                        maxlength="4000"
-                        placeholder="Écrivez votre message à AFRICA AI..."
-                        required
-                    ></textarea>
-
-                    <button type="submit" id="sendButton">
-                        Envoyer ↗
-                    </button>
-
-                </form>
-
-                <p class="chat-disclaimer">
-                    AFRICA AI peut commettre des erreurs.
-                    Vérifiez les informations importantes.
-                </p>
-
-            </div>
-
         </section>
-
-        <!-- AUTRES ESPACES -->
-        <section id="placeholderView" class="placeholder-view" hidden>
-            <div class="welcome-symbol">✦</div>
-            <h1 id="placeholderTitle">Bienvenue</h1>
-            <p id="placeholderDescription">
-                Cet espace sera bientôt disponible.
-            </p>
-            <button id="returnAssistantButton" class="start-btn">
-                Retour à AFRICA BRAIN
-            </button>
+        <section id="memoryView" class="memory-view" hidden>
+            <div class="memory-heading"><div><span class="memory-eyebrow">ESPACE PERSONNEL</span><h1>AFRICA MEMORY</h1><p>Consultez et contrôlez les informations que AFRICA AI conserve à votre demande.</p></div><div class="memory-mark">✦</div></div>
+            <div class="memory-control-card"><div><strong>Mémoire personnelle</strong><p>Quand elle est désactivée, AFRICA AI ne charge ni n'enregistre vos souvenirs pendant les conversations.</p></div><label class="memory-switch"><input type="checkbox" id="memoryEnabledToggle"><span></span></label></div>
+            <div class="memory-toolbar"><div><h2>Mes souvenirs</h2><p id="memoryCount">Chargement…</p></div><button id="refreshMemoriesButton" class="memory-secondary-btn" type="button">Actualiser</button></div>
+            <form id="memoryForm" class="memory-add-form"><label for="memoryInput">Ajouter un souvenir manuellement</label><textarea id="memoryInput" maxlength="2000" rows="3" placeholder="Exemple : Je préfère recevoir des réponses en français."></textarea><button id="saveMemoryButton" type="submit">Enregistrer le souvenir</button></form>
+            <div id="memoryList" class="memory-list" aria-live="polite"><p class="memory-empty">Chargement des souvenirs…</p></div>
+            <div class="memory-danger-zone"><div><strong>Supprimer tous mes souvenirs</strong><p>Cette action est définitive et ne supprime pas vos conversations.</p></div><button id="deleteAllMemoriesButton" type="button" class="memory-danger-btn">Tout supprimer</button></div>
+            <p id="memoryStatus" class="memory-status" role="status"></p>
         </section>
-
-        <footer class="app-footer">
-            AFRICA AI © 2026 · INTELLIGENCE WITHOUT BORDERS
-        </footer>
-
+        <section id="placeholderView" class="placeholder-view" hidden><div class="welcome-symbol">✦</div><h1 id="placeholderTitle">Bienvenue</h1><p id="placeholderDescription">Cet espace sera bientôt disponible.</p><button id="returnAssistantButton" class="start-btn">Retour à AFRICA BRAIN</button></section>
+        <footer class="app-footer">AFRICA AI © 2026 · INTELLIGENCE WITHOUT BORDERS</footer>
     </main>
 </div>
-
-<!-- FONCTIONS FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
-
 <script src="script.js"></script>
-
-</body>
-</html>
+</body></html>
