@@ -467,7 +467,65 @@ def icon_512():
         BASE_DIR / "icon-512.png",
         media_type="image/png"
     )
+@app.get("/api/memories")
+def get_memories(authorization: str = Header(default="")):
+    uid = obtenir_utilisateur(authorization)
 
+    memories = supabase_request(
+        "user_memories",
+        method="GET",
+        params={
+            "select": "id,content,created_at",
+            "firebase_uid": f"eq.{uid}",
+            "order": "created_at.desc",
+            "limit": "100"
+        }
+    )
+
+    return {"memories": memories or []}
+
+
+@app.post("/api/memories")
+def save_memory(data: MemoryRequest, authorization: str = Header(default="")):
+    uid = obtenir_utilisateur(authorization)
+
+    content = data.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Souvenir vide")
+
+    result = supabase_request(
+        "user_memories",
+        method="POST",
+        params={"select": "id,content,created_at"},
+        body={
+            "firebase_uid": uid,
+            "content": content
+        },
+        prefer="return=representation"
+    )
+
+    return {"memory": result[0] if result else None}
+
+
+@app.delete("/api/memories/{memory_id}")
+def delete_memory(memory_id: UUID, authorization: str = Header(default="")):
+    uid = obtenir_utilisateur(authorization)
+
+    result = supabase_request(
+        "user_memories",
+        method="DELETE",
+        params={
+            "id": f"eq.{memory_id}",
+            "firebase_uid": f"eq.{uid}",
+            "select": "id"
+        },
+        prefer="return=representation"
+    )
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Souvenir introuvable")
+
+    return {"success": True, "message": "Souvenir supprimé"}
 
 @app.get("/api/health")
 def verification():
