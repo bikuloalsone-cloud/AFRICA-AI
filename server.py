@@ -56,7 +56,7 @@ SUPABASE_READY = bool(
 app = FastAPI(
     title="AFRICA AI",
     description="Intelligence Without Borders",
-    version="5.2.0"
+    version="5.3.0"
 )
 
 
@@ -433,6 +433,76 @@ def obtenir_souvenirs_utilisateur(uid: str) -> str:
         return ""
 
 
+def enregistrer_souvenir_demande(uid: str, message: str) -> bool:
+    """
+    Enregistre uniquement les informations que l'utilisateur
+    demande explicitement de mémoriser.
+    """
+    motifs = [
+        r"^\s*souviens-toi\s+que\s+(.+)$",
+        r"^\s*souviens\s+toi\s+que\s+(.+)$",
+        r"^\s*retiens\s+que\s+(.+)$",
+        r"^\s*mémorise\s+que\s+(.+)$",
+        r"^\s*memorise\s+que\s+(.+)$",
+        r"^\s*n'oublie\s+pas\s+que\s+(.+)$",
+        r"^\s*garde\s+en\s+mémoire\s+que\s+(.+)$",
+        r"^\s*garde\s+en\s+memoire\s+que\s+(.+)$"
+    ]
+
+    contenu = None
+
+    for motif in motifs:
+        correspondance = re.match(
+            motif,
+            message,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+
+        if correspondance:
+            contenu = correspondance.group(1).strip()
+            break
+
+    if not contenu:
+        return False
+
+    contenu = contenu[:2000].strip()
+
+    if not contenu:
+        return False
+
+    try:
+        existants = supabase_request(
+            "GET",
+            "user_memories",
+            params={
+                "select": "id",
+                "firebase_uid": f"eq.{uid}",
+                "content": f"eq.{contenu}",
+                "limit": "1"
+            }
+        )
+
+        if existants:
+            return True
+
+        supabase_request(
+            "POST",
+            "user_memories",
+            payload={
+                "firebase_uid": uid,
+                "content": contenu
+            },
+            prefer="return=minimal"
+        )
+
+        print("AFRICA MEMORY : souvenir explicitement enregistré.")
+        return True
+
+    except Exception as erreur:
+        print("ERREUR SAUVEGARDE AUTOMATIQUE :", repr(erreur))
+        return False
+
+
 # ==================================================
 # 7. GESTION DES CONVERSATIONS
 # ==================================================
@@ -626,7 +696,7 @@ def verification():
     return {
         "nom": "AFRICA AI",
         "serveur": "actif",
-        "version": "5.2.0",
+        "version": "5.3.0",
         "firebase_auth": firebase_auth_ready,
         "recherche_web_configuree": bool(
             os.getenv("TINYFISH_API_KEY")
@@ -718,7 +788,7 @@ def requete_tinyfish(
     headers = {
         "X-API-Key": api_key,
         "Accept": "application/json",
-        "User-Agent": "AFRICA-AI/5.2"
+        "User-Agent": "AFRICA-AI/5.3"
     }
 
     body = None
@@ -998,10 +1068,8 @@ def discuter(
             detail="Écris un message."
         )
 
-    # Vérifier Supabase avant de commencer
     verifier_supabase()
 
-    # Créer ou vérifier la conversation
     try:
         if data.conversation_id:
             conversation = verifier_proprietaire_conversation(
@@ -1015,7 +1083,6 @@ def discuter(
             conversation = creer_conversation(uid, titre)
             conversation_id = str(conversation["id"])
 
-        # Enregistrer le message utilisateur
         supabase_request(
             "POST",
             "messages",
@@ -1028,7 +1095,6 @@ def discuter(
             prefer="return=minimal"
         )
 
-        # Mettre à jour la date de conversation
         supabase_request(
             "PATCH",
             "conversations",
@@ -1050,15 +1116,17 @@ def discuter(
             detail="Impossible d'enregistrer ton message."
         )
 
-    # Charger les souvenirs de l'utilisateur connecté
+    # Détecter et enregistrer les demandes explicites de mémoire.
+    memory_saved = enregistrer_souvenir_demande(uid, message)
+
+    # Charger les souvenirs après l'enregistrement afin que Gemini
+    # puisse immédiatement utiliser le nouveau souvenir.
     memoire_contexte = obtenir_souvenirs_utilisateur(uid)
 
-    # Recherche Internet
     contexte, sources, avertissement = (
         obtenir_contexte_web(message)
     )
 
-    # Construire le prompt avec ou sans résultats web
     if contexte:
         prompt = f"""
 SOUVENIRS PERSONNELS DE L'UTILISATEUR :
@@ -1114,7 +1182,16 @@ CONSIGNES :
                 "des pages qui n'ont pas été lues."
             )
 
-    # Génération Gemini
+    if memory_saved:
+        prompt += """
+
+IMPORTANT POUR CETTE DEMANDE :
+L'utilisateur vient de demander explicitement de mémoriser une
+information. Le serveur a confirmé son enregistrement. Confirme
+brièvement que tu as enregistré cette information, sans prétendre
+avoir mémorisé autre chose.
+"""
+
     try:
         client = genai.Client(api_key=gemini_key)
 
@@ -1159,7 +1236,6 @@ CONSIGNES :
             detail="Impossible de générer la réponse."
         )
 
-    # Enregistrer la réponse AFRICA AI
     try:
         supabase_request(
             "POST",
@@ -1197,5 +1273,6 @@ CONSIGNES :
     return {
         "reply": answer,
         "web_used": bool(sources),
-        "conversation_id": conversation_id
+        "conversation_id": conversation_id,
+        "memory_saved": memory_saved
     }
