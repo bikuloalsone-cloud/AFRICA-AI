@@ -56,7 +56,7 @@ SUPABASE_READY = bool(
 app = FastAPI(
     title="AFRICA AI",
     description="Intelligence Without Borders",
-    version="5.3.0"
+    version="5.4.0"
 )
 
 
@@ -75,6 +75,10 @@ class ConversationRequest(BaseModel):
 
 class MemoryRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
+
+
+class MemorySettingsRequest(BaseModel):
+    enabled: bool
 
 
 # ==================================================
@@ -287,6 +291,62 @@ def synchroniser_profil(
 # 6. AFRICA MEMORY : SOUVENIRS PERSONNELS
 # ==================================================
 
+def obtenir_reglage_memoire(uid: str) -> bool:
+    """Lit le réglage mémoire de l'utilisateur; activé par défaut."""
+    try:
+        rows = supabase_request(
+            "GET", "user_memory_settings",
+            params={"select": "enabled", "firebase_uid": f"eq.{uid}", "limit": "1"}
+        )
+        return bool(rows[0].get("enabled", True)) if rows else True
+    except Exception as erreur:
+        print("ERREUR REGLAGE MEMOIRE :", repr(erreur))
+        # Échec fermé : ne pas charger ni enregistrer de souvenirs si le réglage est inaccessible.
+        return False
+
+
+@app.get("/api/memories/settings")
+def get_memory_settings(authorization: str | None = Header(default=None)):
+    utilisateur = obtenir_utilisateur(authorization)
+    return {"enabled": obtenir_reglage_memoire(utilisateur["uid"])}
+
+
+@app.patch("/api/memories/settings")
+def update_memory_settings(
+    data: MemorySettingsRequest,
+    authorization: str | None = Header(default=None)
+):
+    utilisateur = obtenir_utilisateur(authorization)
+    uid = utilisateur["uid"]
+    try:
+        rows = supabase_request(
+            "POST", "user_memory_settings",
+            params={"on_conflict": "firebase_uid"},
+            payload={"firebase_uid": uid, "enabled": data.enabled, "updated_at": date_utc()},
+            prefer="resolution=merge-duplicates,return=representation"
+        )
+        return {"success": True, "enabled": bool(rows[0].get("enabled", data.enabled)) if rows else data.enabled}
+    except Exception as erreur:
+        print("ERREUR MODIFICATION REGLAGE MEMOIRE :", repr(erreur))
+        raise HTTPException(status_code=503, detail="Impossible de modifier le réglage mémoire. Vérifiez la table user_memory_settings dans Supabase.")
+
+
+@app.delete("/api/memories")
+def delete_all_memories(authorization: str | None = Header(default=None)):
+    utilisateur = obtenir_utilisateur(authorization)
+    uid = utilisateur["uid"]
+    try:
+        deleted = supabase_request(
+            "DELETE", "user_memories",
+            params={"firebase_uid": f"eq.{uid}", "select": "id"},
+            prefer="return=representation"
+        )
+        return {"success": True, "deleted": len(deleted or [])}
+    except Exception as erreur:
+        print("ERREUR SUPPRESSION TOUTES MEMOIRES :", repr(erreur))
+        raise HTTPException(status_code=503, detail="Impossible de supprimer tous les souvenirs.")
+
+
 @app.get("/api/memories")
 def get_memories(
     authorization: str | None = Header(default=None)
@@ -323,6 +383,12 @@ def save_memory(
 ):
     utilisateur = obtenir_utilisateur(authorization)
     uid = utilisateur["uid"]
+
+    if not obtenir_reglage_memoire(uid):
+        raise HTTPException(
+            status_code=403,
+            detail="AFRICA MEMORY est désactivée. Activez-la dans Paramètres pour enregistrer des souvenirs."
+        )
 
     content = data.content.strip()
 
@@ -1117,11 +1183,17 @@ def discuter(
         )
 
     # Détecter et enregistrer les demandes explicites de mémoire.
-    memory_saved = enregistrer_souvenir_demande(uid, message)
+    memory_enabled = obtenir_reglage_memoire(uid)
+    memory_saved = (
+        enregistrer_souvenir_demande(uid, message)
+        if memory_enabled else False
+    )
 
-    # Charger les souvenirs après l'enregistrement afin que Gemini
-    # puisse immédiatement utiliser le nouveau souvenir.
-    memoire_contexte = obtenir_souvenirs_utilisateur(uid)
+    # Ne charger les souvenirs que si l'utilisateur a activé AFRICA MEMORY.
+    memoire_contexte = (
+        obtenir_souvenirs_utilisateur(uid)
+        if memory_enabled else ""
+    )
 
     contexte, sources, avertissement = (
         obtenir_contexte_web(message)
