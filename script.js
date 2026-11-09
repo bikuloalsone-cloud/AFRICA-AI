@@ -63,6 +63,17 @@ const newConversationButton = document.getElementById(
 
 const assistantView = document.getElementById("assistantView");
 const placeholderView = document.getElementById("placeholderView");
+const memoryView = document.getElementById("memoryView");
+const memoryEnabledToggle = document.getElementById("memoryEnabledToggle");
+const memoryList = document.getElementById("memoryList");
+const memoryCount = document.getElementById("memoryCount");
+const memoryStatus = document.getElementById("memoryStatus");
+const memoryForm = document.getElementById("memoryForm");
+const memoryInput = document.getElementById("memoryInput");
+const saveMemoryButton = document.getElementById("saveMemoryButton");
+const refreshMemoriesButton = document.getElementById("refreshMemoriesButton");
+const deleteAllMemoriesButton = document.getElementById("deleteAllMemoriesButton");
+let memoriesCache = [];
 
 const currentPageTitle = document.getElementById(
     "currentPageTitle"
@@ -225,6 +236,8 @@ function showApplication(user) {
 
     synchroniserProfil();
     chargerConversations();
+    chargerParametresMemoire();
+    chargerMemoires();
 }
 
 
@@ -287,6 +300,7 @@ auth.onAuthStateChanged(user => {
 
         conversations = [];
         activeConversation = null;
+        memoriesCache = [];
     }
 });
 
@@ -609,6 +623,147 @@ if (newConversationButton) {
 
 
 // =====================================================
+// AFRICA MEMORY 2.0 : GESTION DES SOUVENIRS
+// =====================================================
+
+function afficherStatutMemoire(message, erreur = false) {
+    if (!memoryStatus) return;
+    memoryStatus.textContent = message;
+    memoryStatus.classList.toggle("error", erreur);
+}
+
+async function chargerParametresMemoire() {
+    if (!currentUser || !memoryEnabledToggle) return;
+    try {
+        const result = await apiRequest("/api/memories/settings");
+        memoryEnabledToggle.checked = result.enabled !== false;
+    } catch (error) {
+        afficherStatutMemoire("Impossible de charger le réglage mémoire : " + error.message, true);
+    }
+}
+
+async function chargerMemoires() {
+    if (!currentUser || !memoryList) return;
+    memoryList.innerHTML = '<p class="memory-empty">Chargement des souvenirs…</p>';
+    try {
+        const result = await apiRequest("/api/memories");
+        memoriesCache = Array.isArray(result.memories) ? result.memories : [];
+        afficherMemoires();
+    } catch (error) {
+        memoryList.innerHTML = '<p class="memory-empty">Impossible de charger les souvenirs.</p>';
+        memoryCount.textContent = "Chargement impossible";
+        afficherStatutMemoire(error.message, true);
+    }
+}
+
+function afficherMemoires() {
+    if (!memoryList) return;
+    memoryCount.textContent = memoriesCache.length + (memoriesCache.length === 1 ? " souvenir enregistré" : " souvenirs enregistrés");
+    memoryList.innerHTML = "";
+    if (!memoriesCache.length) {
+        memoryList.innerHTML = '<p class="memory-empty">Aucun souvenir enregistré pour le moment.</p>';
+        return;
+    }
+    memoriesCache.forEach(memory => {
+        const card = document.createElement("article");
+        card.className = "memory-item";
+        const content = document.createElement("p");
+        content.textContent = memory.content || "Souvenir sans contenu";
+        const date = document.createElement("small");
+        const parsedDate = memory.created_at ? new Date(memory.created_at) : null;
+        date.textContent = parsedDate && !Number.isNaN(parsedDate.getTime()) ? "Enregistré le " + parsedDate.toLocaleString("fr-FR") : "Date inconnue";
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "memory-delete-btn";
+        remove.textContent = "Supprimer";
+        remove.addEventListener("click", () => supprimerMemoire(memory.id));
+        const meta = document.createElement("div");
+        meta.className = "memory-item-meta";
+        meta.append(date, remove);
+        card.append(content, meta);
+        memoryList.appendChild(card);
+    });
+}
+
+async function ajouterSouvenir(content) {
+    const result = await apiRequest("/api/memories", {
+        method: "POST",
+        body: JSON.stringify({ content })
+    });
+    await chargerMemoires();
+    return result;
+}
+
+async function supprimerMemoire(id) {
+    if (!id || !confirm("Supprimer définitivement ce souvenir ?")) return;
+    try {
+        await apiRequest("/api/memories/" + encodeURIComponent(id), { method: "DELETE" });
+        afficherStatutMemoire("Souvenir supprimé.");
+        await chargerMemoires();
+    } catch (error) {
+        afficherStatutMemoire("Suppression impossible : " + error.message, true);
+    }
+}
+
+if (memoryForm) {
+    memoryForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        const content = memoryInput.value.trim();
+        if (!content) return afficherStatutMemoire("Écris un souvenir avant de l'enregistrer.", true);
+        saveMemoryButton.disabled = true;
+        try {
+            await ajouterSouvenir(content);
+            memoryInput.value = "";
+            afficherStatutMemoire("Souvenir enregistré avec succès.");
+        } catch (error) {
+            afficherStatutMemoire("Enregistrement impossible : " + error.message, true);
+        } finally {
+            saveMemoryButton.disabled = false;
+        }
+    });
+}
+
+if (memoryEnabledToggle) {
+    memoryEnabledToggle.addEventListener("change", async () => {
+        const desired = memoryEnabledToggle.checked;
+        memoryEnabledToggle.disabled = true;
+        try {
+            const result = await apiRequest("/api/memories/settings", {
+                method: "PATCH",
+                body: JSON.stringify({ enabled: desired })
+            });
+            memoryEnabledToggle.checked = result.enabled;
+            afficherStatutMemoire(result.enabled ? "Mémoire activée." : "Mémoire désactivée.");
+        } catch (error) {
+            memoryEnabledToggle.checked = !desired;
+            afficherStatutMemoire("Impossible de modifier le réglage : " + error.message, true);
+        } finally {
+            memoryEnabledToggle.disabled = false;
+        }
+    });
+}
+
+if (refreshMemoriesButton) refreshMemoriesButton.addEventListener("click", chargerMemoires);
+
+if (deleteAllMemoriesButton) {
+    deleteAllMemoriesButton.addEventListener("click", async () => {
+        if (!memoriesCache.length) return afficherStatutMemoire("Aucun souvenir à supprimer.");
+        if (!confirm("Attention : supprimer définitivement TOUS vos souvenirs ? Cette action est irréversible.")) return;
+        deleteAllMemoriesButton.disabled = true;
+        try {
+            await apiRequest("/api/memories", { method: "DELETE" });
+            memoriesCache = [];
+            afficherMemoires();
+            afficherStatutMemoire("Tous vos souvenirs ont été supprimés.");
+        } catch (error) {
+            afficherStatutMemoire("Suppression globale impossible : " + error.message, true);
+        } finally {
+            deleteAllMemoriesButton.disabled = false;
+        }
+    });
+}
+
+// =====================================================
 // 17. NAVIGATION ENTRE LES ESPACES
 // =====================================================
 
@@ -629,20 +784,26 @@ const descriptionsPages = {
     code: "Un espace pour programmer et développer vos projets.",
     create: "Votre studio de création sera bientôt disponible.",
     projects: "Retrouvez et gérez vos projets.",
-    settings: "Gérez les paramètres de votre compte.",
+    settings: "Gérez votre compte et vos souvenirs personnels.",
     premium: "Découvrez les offres AFRICA AI Premium."
 };
 
 function afficherVue(view) {
     const isAssistant = view === "assistant";
+    const isMemory = view === "settings";
 
     assistantView.hidden = !isAssistant;
-    placeholderView.hidden = isAssistant;
+    placeholderView.hidden = isAssistant || isMemory;
+    if (memoryView) memoryView.hidden = !isMemory;
+    if (isMemory) {
+        chargerParametresMemoire();
+        chargerMemoires();
+    }
 
     currentPageTitle.textContent =
         titresPages[view] || "AFRICA AI";
 
-    if (!isAssistant) {
+    if (!isAssistant && !isMemory) {
         placeholderTitle.textContent =
             titresPages[view] || "Bienvenue";
 
@@ -660,6 +821,7 @@ function afficherVue(view) {
 
     if (sidebar) {
         sidebar.classList.remove("open");
+        document.body.classList.remove("sidebar-open");
     }
 }
 
@@ -683,12 +845,14 @@ if (returnAssistantButton) {
 if (openSidebar) {
     openSidebar.addEventListener("click", () => {
         sidebar.classList.add("open");
+        document.body.classList.add("sidebar-open");
     });
 }
 
 if (closeSidebar) {
     closeSidebar.addEventListener("click", () => {
         sidebar.classList.remove("open");
+        document.body.classList.remove("sidebar-open");
     });
 }
 
