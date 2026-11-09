@@ -5,7 +5,9 @@ import json
 import os
 import re
 
-from urllib.error import HTTPError, URLError
+from datetime import datetime, timezone
+from uuid import UUID
+from urllib.error import HTTPError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
@@ -41,17 +43,33 @@ GEMINI_MODEL = os.getenv(
     "gemini-3.5-flash-lite"
 )
 
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv(
+    "SUPABASE_SERVICE_ROLE_KEY",
+    ""
+)
+
+SUPABASE_READY = bool(
+    SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+)
+
 app = FastAPI(
     title="AFRICA AI",
     description="Intelligence Without Borders",
-    version="5.0.0"
+    version="5.1.0"
 )
 
 
 class ChatRequest(BaseModel):
-    message: str = Field(
+    message: str = Field(min_length=1, max_length=12000)
+    conversation_id: UUID | None = None
+
+
+class ConversationRequest(BaseModel):
+    title: str = Field(
+        default="Nouvelle conversation",
         min_length=1,
-        max_length=12000
+        max_length=120
     )
 
 
@@ -63,9 +81,7 @@ firebase_app = None
 firebase_auth_ready = False
 
 try:
-    credential_path = Path(
-        FIREBASE_SERVICE_ACCOUNT_FILE
-    )
+    credential_path = Path(FIREBASE_SERVICE_ACCOUNT_FILE)
 
     if not credential_path.is_file():
         raise FileNotFoundError(
@@ -83,51 +99,341 @@ try:
 
         firebase_app = firebase_admin.initialize_app(
             firebase_credential,
-            {
-                "projectId": FIREBASE_PROJECT_ID
-            }
+            {"projectId": FIREBASE_PROJECT_ID}
         )
 
     firebase_auth_ready = True
-
-    print(
-        "FIREBASE ADMIN : initialisation réussie."
-    )
+    print("FIREBASE ADMIN : initialisation réussie.")
 
 except Exception as erreur:
-
     firebase_app = None
     firebase_auth_ready = False
-
-    print(
-        "ERREUR INITIALISATION FIREBASE ADMIN :",
-        repr(erreur)
-    )
+    print("ERREUR FIREBASE :", repr(erreur))
 
 
 # ==================================================
-# 3. PAGES DU SITE
+# 3. CONNEXION SECURISEE A SUPABASE
+# ==================================================
+
+def verifier_supabase():
+    if not SUPABASE_READY:
+        raise HTTPException(
+            status_code=503,
+            detail="La base de données Supabase n'est pas configurée."
+        )
+
+
+def supabase_request(
+    method: str,
+    table: str,
+    params: dict | None = None,
+    payload: dict | list | None = None,
+    prefer: str | None = None
+):
+    verifier_supabase()
+
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+
+    if params:
+        url += "?" + urlencode(params)
+
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": (
+            "Bearer " + SUPABASE_SERVICE_ROLE_KEY
+        ),
+        "Accept": "application/json"
+    }
+
+    body = None
+
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        body = json.dumps(payload).encode("utf-8")
+
+    if prefer:
+        headers["Prefer"] = prefer
+
+    request = Request(
+        url,
+        data=body,
+        headers=headers,
+        method=method
+    )
+
+    try:
+        with urlopen(request, timeout=20) as response:
+            raw = response.read(2_000_000)
+
+        if not raw:
+            return None
+
+        return json.loads(raw.decode("utf-8"))
+
+    except HTTPError as erreur:
+        detail = erreur.read(4000).decode(
+            "utf-8",
+            errors="replace"
+        )
+
+        print("ERREUR SUPABASE :", erreur.code, detail)
+
+        raise RuntimeError(
+            f"Erreur Supabase ({erreur.code})."
+        )
+
+    except Exception as erreur:
+        print("ERREUR CONNEXION SUPABASE :", repr(erreur))
+        raise RuntimeError("Connexion Supabase impossible.")
+
+
+# ==================================================
+# 4. AUTHENTIFICATION FIREBASE
+# ==================================================
+
+def obtenir_utilisateur(authorization: str | None):
+    if not firebase_auth_ready or firebase_app is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Service de connexion indisponible."
+        )
+
+    if (
+        not authorization
+        or not authorization.startswith("Bearer ")
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Connectez-vous avec Google pour continuer."
+        )
+
+    id_token = authorization.split(" ", 1)[1].strip()
+
+    if not id_token:
+        raise HTTPException(
+            status_code=401,
+            detail="Jeton de connexion manquant."
+        )
+
+    try:
+        utilisateur = firebase_auth.verify_id_token(
+            id_token,
+            app=firebase_app
+        )
+
+        if not utilisateur.get("uid"):
+            raise ValueError("Identifiant utilisateur absent.")
+
+        return utilisateur
+
+    except Exception as erreur:
+        print("ERREUR AUTHENTIFICATION :", repr(erreur))
+
+        raise HTTPException(
+            status_code=401,
+            detail="Connexion Google invalide ou expirée."
+        )
+
+
+def date_utc():
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ==================================================
+# 5. SYNCHRONISATION DU PROFIL UTILISATEUR
+# ==================================================
+
+@app.post("/api/profile")
+def synchroniser_profil(
+    authorization: str | None = Header(default=None)
+):
+    utilisateur = obtenir_utilisateur(authorization)
+
+    donnees = {
+        "firebase_uid": utilisateur["uid"],
+        "email": utilisateur.get("email"),
+        "display_name": utilisateur.get("name"),
+        "avatar_url": utilisateur.get("picture"),
+        "updated_at": date_utc()
+    }
+
+    try:
+        resultat = supabase_request(
+            "POST",
+            "user_profiles",
+            params={"on_conflict": "firebase_uid"},
+            payload=donnees,
+            prefer="resolution=merge-duplicates,return=representation"
+        )
+
+        return {
+            "success": True,
+            "profile": resultat[0] if resultat else None
+        }
+
+    except Exception as erreur:
+        print("ERREUR PROFIL :", repr(erreur))
+        raise HTTPException(
+            status_code=503,
+            detail="Impossible d'enregistrer le profil."
+        )
+
+
+# ==================================================
+# 6. GESTION DES CONVERSATIONS
+# ==================================================
+
+def creer_conversation(uid: str, titre: str):
+    resultat = supabase_request(
+        "POST",
+        "conversations",
+        payload={
+            "firebase_uid": uid,
+            "title": titre[:120]
+        },
+        prefer="return=representation"
+    )
+
+    if not resultat:
+        raise RuntimeError("Conversation non créée.")
+
+    return resultat[0]
+
+
+def verifier_proprietaire_conversation(
+    conversation_id: UUID,
+    uid: str
+):
+    resultat = supabase_request(
+        "GET",
+        "conversations",
+        params={
+            "id": f"eq.{conversation_id}",
+            "firebase_uid": f"eq.{uid}",
+            "select": "id"
+        }
+    )
+
+    if not resultat:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation introuvable."
+        )
+
+    return resultat[0]
+
+
+@app.post("/api/conversations")
+def nouvelle_conversation(
+    data: ConversationRequest,
+    authorization: str | None = Header(default=None)
+):
+    utilisateur = obtenir_utilisateur(authorization)
+
+    try:
+        conversation = creer_conversation(
+            utilisateur["uid"],
+            data.title.strip() or "Nouvelle conversation"
+        )
+
+        return {"conversation": conversation}
+
+    except HTTPException:
+        raise
+
+    except Exception as erreur:
+        print("ERREUR CREATION CONVERSATION :", repr(erreur))
+        raise HTTPException(
+            status_code=503,
+            detail="Impossible de créer la conversation."
+        )
+
+
+@app.get("/api/conversations")
+def liste_conversations(
+    authorization: str | None = Header(default=None)
+):
+    utilisateur = obtenir_utilisateur(authorization)
+
+    try:
+        resultat = supabase_request(
+            "GET",
+            "conversations",
+            params={
+                "firebase_uid": f"eq.{utilisateur['uid']}",
+                "select": "id,title,created_at,updated_at",
+                "order": "updated_at.desc",
+                "limit": "100"
+            }
+        )
+
+        return {"conversations": resultat or []}
+
+    except Exception as erreur:
+        print("ERREUR HISTORIQUE :", repr(erreur))
+        raise HTTPException(
+            status_code=503,
+            detail="Impossible de charger les conversations."
+        )
+
+
+@app.get("/api/conversations/{conversation_id}/messages")
+def historique_messages(
+    conversation_id: UUID,
+    authorization: str | None = Header(default=None)
+):
+    utilisateur = obtenir_utilisateur(authorization)
+
+    try:
+        verifier_proprietaire_conversation(
+            conversation_id,
+            utilisateur["uid"]
+        )
+
+        resultat = supabase_request(
+            "GET",
+            "messages",
+            params={
+                "conversation_id": f"eq.{conversation_id}",
+                "firebase_uid": f"eq.{utilisateur['uid']}",
+                "select": "id,role,content,created_at",
+                "order": "created_at.asc",
+                "limit": "500"
+            }
+        )
+
+        return {"messages": resultat or []}
+
+    except HTTPException:
+        raise
+
+    except Exception as erreur:
+        print("ERREUR CHARGEMENT MESSAGES :", repr(erreur))
+        raise HTTPException(
+            status_code=503,
+            detail="Impossible de charger les messages."
+        )
+
+
+# ==================================================
+# 7. PAGES DU SITE
 # ==================================================
 
 @app.get("/")
 def accueil():
-    return FileResponse(
-        BASE_DIR / "index.html"
-    )
+    return FileResponse(BASE_DIR / "index.html")
 
 
 @app.get("/style.css")
 def style():
-    return FileResponse(
-        BASE_DIR / "style.css"
-    )
+    return FileResponse(BASE_DIR / "style.css")
 
 
 @app.get("/script.js")
 def script():
-    return FileResponse(
-        BASE_DIR / "script.js"
-    )
+    return FileResponse(BASE_DIR / "script.js")
+
+
 @app.get("/manifest.webmanifest")
 def manifest():
     return FileResponse(
@@ -160,22 +466,23 @@ def icon_512():
         media_type="image/png"
     )
 
+
 @app.get("/api/health")
 def verification():
-
     return {
         "nom": "AFRICA AI",
         "serveur": "actif",
-        "version": "5.0.0",
+        "version": "5.1.0",
         "firebase_auth": firebase_auth_ready,
         "recherche_web_configuree": bool(
             os.getenv("TINYFISH_API_KEY")
-        )
+        ),
+        "supabase_configuree": SUPABASE_READY
     }
 
 
 # ==================================================
-# 4. TINYFISH : EXTRACTION DES LIENS
+# 8. TINYFISH : EXTRACTION DES LIENS
 # ==================================================
 
 URL_PATTERN = re.compile(
@@ -185,19 +492,12 @@ URL_PATTERN = re.compile(
 
 
 def extraire_urls(message: str) -> list[str]:
-
     urls = []
 
     for candidate in URL_PATTERN.findall(message):
+        candidate = candidate.rstrip(".,;:!?)]}")
 
-        candidate = candidate.rstrip(
-            ".,;:!?)]}"
-        )
-
-        if (
-            url_publique(candidate)
-            and candidate not in urls
-        ):
+        if url_publique(candidate) and candidate not in urls:
             urls.append(candidate)
 
         if len(urls) >= 5:
@@ -207,16 +507,11 @@ def extraire_urls(message: str) -> list[str]:
 
 
 def url_publique(url: str) -> bool:
-
     try:
-
         parsed = urlparse(url)
         host = parsed.hostname
 
-        if parsed.scheme.lower() not in (
-            "http",
-            "https"
-        ):
+        if parsed.scheme.lower() not in ("http", "https"):
             return False
 
         if not host:
@@ -227,24 +522,19 @@ def url_publique(url: str) -> bool:
 
         host = host.lower().rstrip(".")
 
-        if host in (
-            "localhost",
-            "localhost.localdomain"
-        ):
+        if host in ("localhost", "localhost.localdomain"):
             return False
 
         if host.endswith(".local"):
             return False
 
         try:
-
             address = ipaddress.ip_address(host)
 
             if not address.is_global:
                 return False
 
         except ValueError:
-
             if "." not in host:
                 return False
 
@@ -255,7 +545,7 @@ def url_publique(url: str) -> bool:
 
 
 # ==================================================
-# 5. TINYFISH : REQUETES INTERNET
+# 9. TINYFISH : REQUETES INTERNET
 # ==================================================
 
 def requete_tinyfish(
@@ -274,20 +564,14 @@ def requete_tinyfish(
     headers = {
         "X-API-Key": api_key,
         "Accept": "application/json",
-        "User-Agent": "AFRICA-AI/5.0"
+        "User-Agent": "AFRICA-AI/5.1"
     }
 
     body = None
 
     if payload is not None:
-
-        headers["Content-Type"] = (
-            "application/json"
-        )
-
-        body = json.dumps(
-            payload
-        ).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+        body = json.dumps(payload).encode("utf-8")
 
     request = Request(
         url,
@@ -296,27 +580,19 @@ def requete_tinyfish(
         method=method
     )
 
-    with urlopen(
-        request,
-        timeout=35
-    ) as response:
-
+    with urlopen(request, timeout=35) as response:
         raw = response.read(3_000_000)
 
-    result = json.loads(
-        raw.decode("utf-8")
-    )
+    result = json.loads(raw.decode("utf-8"))
 
     if not isinstance(result, dict):
-        raise ValueError(
-            "Réponse TinyFish non valide."
-        )
+        raise ValueError("Réponse TinyFish non valide.")
 
     return result
 
 
 # ==================================================
-# 6. RECHERCHE AUTOMATIQUE INTERNET
+# 10. RECHERCHE AUTOMATIQUE INTERNET
 # ==================================================
 
 def rechercher_internet(
@@ -335,20 +611,13 @@ def rechercher_internet(
         }
     )
 
-    items = result.get(
-        "results",
-        []
-    )
+    items = result.get("results", [])
 
-    return (
-        items
-        if isinstance(items, list)
-        else []
-    )
+    return items if isinstance(items, list) else []
 
 
 # ==================================================
-# 7. LECTURE DES PAGES INTERNET
+# 11. LECTURE DES PAGES INTERNET
 # ==================================================
 
 def lire_pages(
@@ -357,9 +626,7 @@ def lire_pages(
 ) -> list[dict]:
 
     valid_urls = [
-        url
-        for url in urls
-        if url_publique(url)
+        url for url in urls if url_publique(url)
     ][:5]
 
     if not valid_urls:
@@ -375,24 +642,16 @@ def lire_pages(
         }
     )
 
-    items = result.get(
-        "results",
-        []
-    )
+    items = result.get("results", [])
 
-    return (
-        items
-        if isinstance(items, list)
-        else []
-    )
+    return items if isinstance(items, list) else []
 
 
 # ==================================================
-# 8. DETECTER LES DEMANDES DE RECHERCHE
+# 12. DETECTER LES DEMANDES DE RECHERCHE
 # ==================================================
 
 def besoin_recherche(message: str) -> bool:
-
     texte = message.lower()
 
     mots_cles = (
@@ -430,14 +689,11 @@ def besoin_recherche(message: str) -> bool:
         "cette semaine"
     )
 
-    return any(
-        mot in texte
-        for mot in mots_cles
-    )
+    return any(mot in texte for mot in mots_cles)
 
 
 # ==================================================
-# 9. CONSTRUIRE LE CONTEXTE INTERNET
+# 13. CONSTRUIRE LE CONTEXTE INTERNET
 # ==================================================
 
 def obtenir_contexte_web(
@@ -445,64 +701,35 @@ def obtenir_contexte_web(
 ) -> tuple[str, list[dict], str]:
 
     urls_fournies = extraire_urls(message)
-
-    recherche_demandee = besoin_recherche(
-        message
-    )
+    recherche_demandee = besoin_recherche(message)
 
     if not urls_fournies and not recherche_demandee:
         return "", [], ""
 
-    api_key = os.getenv(
-        "TINYFISH_API_KEY"
-    )
+    api_key = os.getenv("TINYFISH_API_KEY")
 
     if not api_key:
-
-        return (
-            "",
-            [],
-            "La recherche Internet n'est pas configurée."
-        )
+        return "", [], "La recherche Internet n'est pas configurée."
 
     sources = []
     morceaux = []
     avertissement = ""
 
     try:
-
         if urls_fournies:
-
-            pages = lire_pages(
-                urls_fournies,
-                api_key
-            )
+            pages = lire_pages(urls_fournies, api_key)
 
             for page in pages:
-
-                titre = str(
-                    page.get("title")
-                    or "Page Internet"
-                )
-
+                titre = str(page.get("title") or "Page Internet")
                 lien = str(
                     page.get("final_url")
                     or page.get("url")
                     or ""
                 )
-
-                contenu = str(
-                    page.get("text")
-                    or ""
-                )
+                contenu = str(page.get("text") or "")
 
                 if contenu.strip():
-
-                    sources.append({
-                        "title": titre,
-                        "url": lien
-                    })
-
+                    sources.append({"title": titre, "url": lien})
                     morceaux.append(
                         f"[SOURCE {len(sources)}]\n"
                         f"Titre : {titre}\n"
@@ -511,28 +738,17 @@ def obtenir_contexte_web(
                     )
 
             if not morceaux:
-
                 avertissement = (
-                    "Les liens fournis n'ont pas pu "
-                    "être lus. Demande à l'utilisateur "
-                    "de coller le passage utile."
+                    "Les liens fournis n'ont pas pu être lus. "
+                    "Demande à l'utilisateur de coller le passage utile."
                 )
 
         elif recherche_demandee:
-
-            resultats = rechercher_internet(
-                message,
-                api_key
-            )
-
+            resultats = rechercher_internet(message, api_key)
             urls_trouvees = []
 
             for item in resultats[:5]:
-
-                lien = str(
-                    item.get("url")
-                    or ""
-                )
+                lien = str(item.get("url") or "")
 
                 if lien and not lien.lower().startswith(
                     ("http://", "https://")
@@ -545,36 +761,22 @@ def obtenir_contexte_web(
                 ):
                     urls_trouvees.append(lien)
 
-            pages = lire_pages(
-                urls_trouvees[:3],
-                api_key
-            ) if urls_trouvees else []
+            pages = (
+                lire_pages(urls_trouvees[:3], api_key)
+                if urls_trouvees else []
+            )
 
             for page in pages:
-
-                titre = str(
-                    page.get("title")
-                    or "Page Internet"
-                )
-
+                titre = str(page.get("title") or "Page Internet")
                 lien = str(
                     page.get("final_url")
                     or page.get("url")
                     or ""
                 )
-
-                contenu = str(
-                    page.get("text")
-                    or ""
-                )
+                contenu = str(page.get("text") or "")
 
                 if contenu.strip():
-
-                    sources.append({
-                        "title": titre,
-                        "url": lien
-                    })
-
+                    sources.append({"title": titre, "url": lien})
                     morceaux.append(
                         f"[SOURCE {len(sources)}]\n"
                         f"Titre : {titre}\n"
@@ -583,31 +785,16 @@ def obtenir_contexte_web(
                     )
 
             if not morceaux:
-
                 for item in resultats[:5]:
-
                     titre = str(
                         item.get("title")
                         or "Résultat de recherche"
                     )
-
-                    lien = str(
-                        item.get("url")
-                        or ""
-                    )
-
-                    extrait = str(
-                        item.get("snippet")
-                        or ""
-                    )
+                    lien = str(item.get("url") or "")
+                    extrait = str(item.get("snippet") or "")
 
                     if titre and extrait:
-
-                        sources.append({
-                            "title": titre,
-                            "url": lien
-                        })
-
+                        sources.append({"title": titre, "url": lien})
                         morceaux.append(
                             f"[SOURCE {len(sources)}]\n"
                             f"Titre : {titre}\n"
@@ -616,31 +803,21 @@ def obtenir_contexte_web(
                         )
 
             if not morceaux:
-
                 avertissement = (
                     "Aucun résultat exploitable n'a été trouvé."
                 )
 
     except Exception as erreur:
-
-        print(
-            "ERREUR TINYFISH :",
-            repr(erreur)
-        )
-
+        print("ERREUR TINYFISH :", repr(erreur))
         avertissement = (
             "La recherche Internet a échoué temporairement."
         )
 
-    return (
-        "\n\n".join(morceaux),
-        sources,
-        avertissement
-    )
+    return "\n\n".join(morceaux), sources, avertissement
 
 
 # ==================================================
-# 10. CHAT : PROTECTION GOOGLE OBLIGATOIRE
+# 14. CHAT : GEMINI + SAUVEGARDE SUPABASE
 # ==================================================
 
 @app.post("/api/chat")
@@ -648,75 +825,12 @@ def discuter(
     data: ChatRequest,
     authorization: str | None = Header(default=None)
 ):
+    utilisateur = obtenir_utilisateur(authorization)
+    uid = utilisateur["uid"]
 
-    # Vérifier Firebase Admin
-
-    if not firebase_auth_ready or firebase_app is None:
-
-        raise HTTPException(
-            status_code=503,
-            detail="Service de connexion indisponible."
-        )
-
-    # Exiger une connexion Google
-
-    if (
-        not authorization
-        or not authorization.startswith("Bearer ")
-    ):
-
-        raise HTTPException(
-            status_code=401,
-            detail="Connectez-vous avec Google pour continuer."
-        )
-
-    id_token = authorization.split(
-        " ",
-        1
-    )[1].strip()
-
-    if not id_token:
-
-        raise HTTPException(
-            status_code=401,
-            detail="Jeton de connexion manquant."
-        )
-
-    # Vérifier le jeton Firebase
-
-    try:
-
-        utilisateur = firebase_auth.verify_id_token(
-            id_token,
-            app=firebase_app
-        )
-
-        if not utilisateur.get("uid"):
-
-            raise ValueError(
-                "Identifiant utilisateur absent."
-            )
-
-    except Exception as erreur:
-
-        print(
-            "ERREUR AUTHENTIFICATION FIREBASE :",
-            repr(erreur)
-        )
-
-        raise HTTPException(
-            status_code=401,
-            detail="Connexion Google invalide ou expirée."
-        )
-
-    # Vérifier Gemini
-
-    gemini_key = os.getenv(
-        "GEMINI_API_KEY"
-    )
+    gemini_key = os.getenv("GEMINI_API_KEY")
 
     if not gemini_key:
-
         raise HTTPException(
             status_code=503,
             detail="La clé Gemini est manquante."
@@ -725,20 +839,69 @@ def discuter(
     message = data.message.strip()
 
     if not message:
-
         raise HTTPException(
             status_code=400,
             detail="Écris un message."
         )
 
-    # Recherche Internet
+    # Vérifier Supabase avant de commencer
+    verifier_supabase()
 
+    # Créer ou vérifier la conversation
+    try:
+        if data.conversation_id:
+            conversation = verifier_proprietaire_conversation(
+                data.conversation_id,
+                uid
+            )
+            conversation_id = str(conversation["id"])
+
+        else:
+            titre = message[:70]
+            conversation = creer_conversation(uid, titre)
+            conversation_id = str(conversation["id"])
+
+        # Enregistrer le message utilisateur
+        supabase_request(
+            "POST",
+            "messages",
+            payload={
+                "conversation_id": conversation_id,
+                "firebase_uid": uid,
+                "role": "user",
+                "content": message
+            },
+            prefer="return=minimal"
+        )
+
+        # Mettre à jour la date de conversation
+        supabase_request(
+            "PATCH",
+            "conversations",
+            params={
+                "id": f"eq.{conversation_id}",
+                "firebase_uid": f"eq.{uid}"
+            },
+            payload={"updated_at": date_utc()},
+            prefer="return=minimal"
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as erreur:
+        print("ERREUR SAUVEGARDE UTILISATEUR :", repr(erreur))
+        raise HTTPException(
+            status_code=503,
+            detail="Impossible d'enregistrer ton message."
+        )
+
+    # Recherche Internet
     contexte, sources, avertissement = (
         obtenir_contexte_web(message)
     )
 
     if contexte:
-
         prompt = f"""
 QUESTION DE L'UTILISATEUR :
 {message}
@@ -747,7 +910,6 @@ CONTENUS WEB RECUEILLIS :
 {contexte}
 
 CONSIGNES :
-
 - Réponds dans la langue de l'utilisateur.
 - Analyse les informations fournies.
 - Compare les sources pertinentes.
@@ -759,13 +921,10 @@ CONSIGNES :
 - Cite les informations avec [1], [2], etc.
 - Signale les contradictions et les incertitudes.
 """
-
     else:
-
         prompt = message
 
         if avertissement:
-
             prompt += (
                 "\n\nNote technique : "
                 + avertissement
@@ -773,22 +932,17 @@ CONSIGNES :
                 "des pages qui n'ont pas été lues."
             )
 
-    # Génération de la réponse Gemini
-
+    # Génération Gemini
     try:
-
-        client = genai.Client(
-            api_key=gemini_key
-        )
+        client = genai.Client(api_key=gemini_key)
 
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
             config={
                 "system_instruction": (
-                    "Tu es AFRICA AI, un assistant "
-                    "intelligent, clair, rigoureux, "
-                    "utile et respectueux. "
+                    "Tu es AFRICA AI, un assistant intelligent, "
+                    "clair, rigoureux, utile et respectueux. "
                     "Réponds dans la langue de l'utilisateur. "
                     "Utilise un style naturel et bien organisé. "
                     "Évite les symboles décoratifs inutiles. "
@@ -800,47 +954,64 @@ CONSIGNES :
         answer = response.text
 
         if not answer or not answer.strip():
-
-            raise RuntimeError(
-                "Réponse vide de Gemini."
-            )
-
-        # Ajouter les sources consultées
+            raise RuntimeError("Réponse vide de Gemini.")
 
         if sources:
-
             answer += "\n\nSources consultées :\n"
 
-            for index, source in enumerate(
-                sources,
-                start=1
-            ):
-
+            for index, source in enumerate(sources, start=1):
                 answer += (
                     f"\n[{index}] {source['title']}\n"
                     f"{source['url']}\n"
                 )
 
         elif avertissement:
-
-            answer += (
-                "\n\nInformation : "
-                + avertissement
-            )
-
-        return {
-            "reply": answer,
-            "web_used": bool(sources)
-        }
+            answer += "\n\nInformation : " + avertissement
 
     except Exception as erreur:
-
-        print(
-            "ERREUR AFRICA AI / GEMINI :",
-            repr(erreur)
-        )
-
+        print("ERREUR AFRICA AI / GEMINI :", repr(erreur))
         raise HTTPException(
             status_code=502,
             detail="Impossible de générer la réponse."
         )
+
+    # Enregistrer la réponse AFRICA AI
+    try:
+        supabase_request(
+            "POST",
+            "messages",
+            payload={
+                "conversation_id": conversation_id,
+                "firebase_uid": uid,
+                "role": "assistant",
+                "content": answer
+            },
+            prefer="return=minimal"
+        )
+
+        supabase_request(
+            "PATCH",
+            "conversations",
+            params={
+                "id": f"eq.{conversation_id}",
+                "firebase_uid": f"eq.{uid}"
+            },
+            payload={"updated_at": date_utc()},
+            prefer="return=minimal"
+        )
+
+    except Exception as erreur:
+        print("ERREUR SAUVEGARDE REPONSE :", repr(erreur))
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "La réponse a été générée, mais sa sauvegarde "
+                "a échoué. Réessaie après vérification."
+            )
+        )
+
+    return {
+        "reply": answer,
+        "web_used": bool(sources),
+        "conversation_id": conversation_id
+    }
