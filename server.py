@@ -52,6 +52,8 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv(
 SUPABASE_READY = bool(
     SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 )
+class MemoryRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
 
 app = FastAPI(
     title="AFRICA AI",
