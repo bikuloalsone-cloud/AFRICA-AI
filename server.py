@@ -11,6 +11,7 @@ from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -1330,3 +1331,64 @@ Le serveur a confirmé son enregistrement. Confirme brièvement cette sauvegarde
         "memory_saved": memory_saved,
         "provider": provider_used
     }
+
+
+# ==================================================
+# 15. AUTHENTIFICATION FIREBASE DANS SWAGGER
+# ==================================================
+# Cette section ajoute le bouton "Authorize" dans /docs.
+# Elle ne change PAS la vérification réelle du jeton Firebase.
+# Les routes /api/* (sauf /api/health) sont documentées comme protégées.
+# Swagger transmettra le jeton sous la forme Authorization: Bearer <token>.
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes
+    )
+
+    components = openapi_schema.setdefault("components", {})
+    security_schemes = components.setdefault("securitySchemes", {})
+    security_schemes["FirebaseBearer"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Firebase ID Token",
+        "description": (
+            "Collez ici le Firebase ID Token obtenu après la connexion Google. "
+            "Ne collez pas la clé API Gemini ni le jeton Google OAuth."
+        )
+    }
+
+    methods_http = {"get", "post", "put", "patch", "delete", "options", "head"}
+
+    for path, path_item in openapi_schema.get("paths", {}).items():
+        if not path.startswith("/api/") or path == "/api/health":
+            continue
+
+        for method, operation in path_item.items():
+            if method.lower() not in methods_http or not isinstance(operation, dict):
+                continue
+
+            # Le schéma Bearer gère Authorization. On retire le paramètre
+            # Header facultatif généré par FastAPI pour éviter un doublon Swagger.
+            parameters = operation.get("parameters", [])
+            operation["parameters"] = [
+                parameter for parameter in parameters
+                if not (
+                    parameter.get("in") == "header"
+                    and parameter.get("name", "").lower() == "authorization"
+                )
+            ]
+
+            operation["security"] = [{"FirebaseBearer": []}]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
