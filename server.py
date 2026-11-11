@@ -14,6 +14,8 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from anthropic import Anthropic
+
 from google import genai
 
 import firebase_admin
