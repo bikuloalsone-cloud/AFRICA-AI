@@ -67,6 +67,20 @@ class ConversationRequest(BaseModel):
     title: str = Field(default="Nouvelle conversation", min_length=1, max_length=120)
 
 
+class PlannerItemRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    scheduled_at: str = Field(min_length=10, max_length=40)
+    item_type: str = Field(default="Tâche", max_length=40)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class ProjectRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    goal: str | None = Field(default=None, max_length=4000)
+    status: str = Field(default="À démarrer", max_length=40)
+    due_date: str | None = Field(default=None, max_length=20)
+
+
 class MemoryRequest(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
 
@@ -246,6 +260,129 @@ def synchroniser_profil(authorization: str | None = Header(default=None)):
     except Exception as erreur:
         print("ERREUR PROFIL :", repr(erreur))
         raise HTTPException(status_code=503, detail="Impossible d'enregistrer le profil.")
+
+
+# ==================================================
+# 6B. PLANNER ET PROJECTS : DONNEES SYNCHRONISEES
+# ==================================================
+
+@app.get("/api/planner")
+def liste_planner(authorization: str | None = Header(default=None)):
+    utilisateur = obtenir_utilisateur(authorization)
+    try:
+        rows = supabase_request(
+            "GET", "user_planner_items",
+            params={
+                "firebase_uid": f"eq.{utilisateur['uid']}",
+                "select": "id,title,scheduled_at,item_type,notes,created_at",
+                "order": "scheduled_at.asc",
+                "limit": "500"
+            }
+        )
+        return {"items": rows or []}
+    except Exception as erreur:
+        print("ERREUR PLANNER :", repr(erreur))
+        raise HTTPException(status_code=503, detail="Impossible de charger Planner. Vérifiez la table user_planner_items dans Supabase.")
+
+
+@app.post("/api/planner")
+def ajouter_planner(data: PlannerItemRequest, authorization: str | None = Header(default=None)):
+    utilisateur = obtenir_utilisateur(authorization)
+    try:
+        rows = supabase_request(
+            "POST", "user_planner_items",
+            payload={
+                "firebase_uid": utilisateur["uid"],
+                "title": data.title.strip(),
+                "scheduled_at": data.scheduled_at,
+                "item_type": data.item_type,
+                "notes": data.notes
+            },
+            prefer="return=representation"
+        )
+        return {"item": rows[0] if rows else None}
+    except Exception as erreur:
+        print("ERREUR AJOUT PLANNER :", repr(erreur))
+        raise HTTPException(status_code=503, detail="Impossible d'enregistrer cette tâche. Vérifiez la table user_planner_items dans Supabase.")
+
+
+@app.delete("/api/planner/{item_id}")
+def supprimer_planner(item_id: UUID, authorization: str | None = Header(default=None)):
+    utilisateur = obtenir_utilisateur(authorization)
+    try:
+        rows = supabase_request(
+            "DELETE", "user_planner_items",
+            params={"id": f"eq.{item_id}", "firebase_uid": f"eq.{utilisateur['uid']}", "select": "id"},
+            prefer="return=representation"
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Élément Planner introuvable.")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as erreur:
+        print("ERREUR SUPPRESSION PLANNER :", repr(erreur))
+        raise HTTPException(status_code=503, detail="Impossible de supprimer cet élément Planner.")
+
+
+@app.get("/api/projects")
+def liste_projects(authorization: str | None = Header(default=None)):
+    utilisateur = obtenir_utilisateur(authorization)
+    try:
+        rows = supabase_request(
+            "GET", "user_projects",
+            params={
+                "firebase_uid": f"eq.{utilisateur['uid']}",
+                "select": "id,name,goal,status,due_date,created_at,updated_at",
+                "order": "updated_at.desc",
+                "limit": "200"
+            }
+        )
+        return {"projects": rows or []}
+    except Exception as erreur:
+        print("ERREUR PROJECTS :", repr(erreur))
+        raise HTTPException(status_code=503, detail="Impossible de charger Projects. Vérifiez la table user_projects dans Supabase.")
+
+
+@app.post("/api/projects")
+def ajouter_project(data: ProjectRequest, authorization: str | None = Header(default=None)):
+    utilisateur = obtenir_utilisateur(authorization)
+    try:
+        rows = supabase_request(
+            "POST", "user_projects",
+            payload={
+                "firebase_uid": utilisateur["uid"],
+                "name": data.name.strip(),
+                "goal": data.goal,
+                "status": data.status,
+                "due_date": data.due_date,
+                "updated_at": date_utc()
+            },
+            prefer="return=representation"
+        )
+        return {"project": rows[0] if rows else None}
+    except Exception as erreur:
+        print("ERREUR AJOUT PROJECT :", repr(erreur))
+        raise HTTPException(status_code=503, detail="Impossible d'enregistrer ce projet. Vérifiez la table user_projects dans Supabase.")
+
+
+@app.delete("/api/projects/{project_id}")
+def supprimer_project(project_id: UUID, authorization: str | None = Header(default=None)):
+    utilisateur = obtenir_utilisateur(authorization)
+    try:
+        rows = supabase_request(
+            "DELETE", "user_projects",
+            params={"id": f"eq.{project_id}", "firebase_uid": f"eq.{utilisateur['uid']}", "select": "id"},
+            prefer="return=representation"
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Projet introuvable.")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as erreur:
+        print("ERREUR SUPPRESSION PROJECT :", repr(erreur))
+        raise HTTPException(status_code=503, detail="Impossible de supprimer ce projet.")
 
 
 # ==================================================
